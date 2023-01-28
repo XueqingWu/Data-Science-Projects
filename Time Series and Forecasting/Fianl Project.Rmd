@@ -1,0 +1,184 @@
+---
+title: "MA585 Project"
+output: pdf_document
+---
+
+library(tidyverse)
+library(forecast)
+library(tseries)
+library(TSA)
+
+```{r Data Description and Data Transformation}
+# Seperate Train Dataset and Test dataset
+train=ECOMNSA_Data_Cleaning$value_b[1:68]
+test=ECOMNSA_Data_Cleaning$value_b[69:80]
+
+plot.ts(train, xlab="Time (Quarters)", ylab="Sales (in billions of dollars)")
+title("Plot of the Training Dataset")
+train_s=ts(train, frequency=4)
+
+# Data decomposition
+plot(decompose(train_s, type="multiplicative"))
+
+# Data Transformation--log
+logtrain=log(train_s)
+plot.ts(logtrain)
+#Data Transformation--Square Root
+sqrttrain=sqrt(train_s)
+plot.ts(sqrttrain)
+# Log Transformation is working better
+```
+```{r Differencing}
+# Conduct Dickey-Fuller Test to check if differencing is needed
+adf.test(train_s)
+# The Dickey-Fuller Test cannot reject null hypothesis, so it is nonstationary, so it needs differencing
+
+
+# A seasonal differencing and a non-seasonal differencing
+diftrain=diff(log(train_s))
+plot(diftrain)
+par(mfrow=c(1, 2))
+acf(diftrain)
+pacf(diftrain)
+
+
+diftrain=diff(diftrain, 4)
+plot(diftrain)
+plot(diff(diftrain))
+par(mfrow=c(1, 2))
+acf(diftrain)
+pacf(diftrain)
+
+
+acf(diff(diftrain))
+pacf(diff(diftrain))
+
+
+```
+```{r SARIMA Model}
+sarimafit=Arima(diftrain,order=c(1,1,0),seasonal=list(order=c(0,1,2),period=4))
+sarimafit
+
+```
+
+```{r SARIMA d=2}
+sarimafit1=Arima(train_s,order=c(1,2,0),seasonal=list(order=c(0,1,1),period=4), lambda=0)
+sarimafit1
+# diagnostic
+tsdiag(sarimafit1)
+par(mfrow=c(1, 2))
+qqnorm(residuals(sarimafit1))
+qqline(residuals(sarimafit1))
+```
+
+
+```{r Subset ARMA Model Selection}
+subsetarima=armasubsets(diftrain, nar=15, nma=15)
+plot(subsetarima)
+
+subsetfit=Arima(train_s, order = c(4,1,0), fixed=c(rep(0, 3), NA), lambda = 0)
+subsetfit
+```
+
+```{r Subset d=2}
+subsetarima1=armasubsets(diff(diftrain), nar=15, nma=15)
+plot(subsetarima1)
+
+subsetfit1=Arima(train_s, order = c(0,2,10), seasonal=list(order=c(0,1,0),period=4), fixed=c(rep(0, 9), NA), lambda = 0)
+subsetfit1
+
+# Diagnostic
+tsdiag(subsetfit1)
+qqnorm(residuals(subsetfit1))
+qqline(residuals(subsetfit1))
+
+```
+
+```{r Auto ARIMA}
+autofit=auto.arima(train_s, lambda=0)
+autofit
+
+# diagnostic
+tsdiag(autofit)
+qqnorm(residuals(autofit))
+qqline(residuals(autofit))
+```
+
+
+
+
+
+
+```{r Holt Winters Forecast}
+fitHW=HoltWinters(train_s, seasonal="multiplicative")
+fitHW
+fcastHW=forecast(fitHW, h=12)
+fcastHW
+plot(forecast(fitHW))
+```
+
+```{r Forecast}
+# SARIMA Forecast
+SARIMAfcast=forecast(sarimafit1, h=12)
+SARIMAfcast
+plot(SARIMAfcast)
+
+# Auto ARIMA
+autofcast=forecast(autofit, h=12)
+autofcast
+plot(autofcast)
+
+# Subset ARMA Forecast
+subsetfcast1=forecast(subsetfit1, h=12)
+subsetfcast1
+plot(subsetfcast1)
+```
+
+
+
+
+```{r Forecast Erros}
+# SARIMA Forecast
+SARIMAerror=test-SARIMAfcast$mean
+SARIMAerror
+SARIMArmse=sqrt(mean(SARIMAerror^2))
+SARIMAmae=mean(abs(SARIMAerror))
+SARIMAmape=mean(abs(SARIMAerror*100/test))
+SARIMArmse
+SARIMAmae
+SARIMAmape
+
+# Auto ARIMA Forecast
+Autoerror=test-autofcast$mean
+Autoerror
+Autormse=sqrt(mean(Autoerror^2))
+Automae=mean(abs(Autoerror))
+Automape=mean(abs(Autoerror*100/test))
+Autormse
+Automae
+Automape
+
+# Subset ARMA Forecast
+subseterror=test-subsetfcast$mean
+subseterror
+subsetrmse=sqrt(mean(subseterror^2))
+subsetmae=mean(abs(subseterror))
+subsetmape=mean(abs(subseterror*100/test))
+subsetrmse
+subsetmae
+subsetmape
+
+# HW Forecast
+HWerror=test-fcastHW$mean
+HWerror
+HWrmse=sqrt(mean(HWerror^2))
+HWmae=mean(abs(HWerror))
+HWmape=mean(abs(HWerror*100/test))
+HWrmse
+HWmae
+HWmape
+
+
+
+```
+
